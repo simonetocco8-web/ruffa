@@ -1,0 +1,29 @@
+CREATE DATABASE IF NOT EXISTS blueprint CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE blueprint;
+
+CREATE TABLE users (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(80) NOT NULL, last_name VARCHAR(80) NOT NULL, email VARCHAR(190) NOT NULL UNIQUE, phone VARCHAR(30), password_hash VARCHAR(255) NOT NULL, role ENUM('administrator','secretary','physiotherapist') NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE patients (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, first_name VARCHAR(80) NOT NULL, last_name VARCHAR(80) NOT NULL, fiscal_code VARCHAR(16) UNIQUE, birth_date DATE, birth_place VARCHAR(120), address VARCHAR(190), city VARCHAR(100), postal_code VARCHAR(10), email VARCHAR(190), phone VARCHAR(30), notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);
+CREATE TABLE services (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, description VARCHAR(190) NOT NULL, duration_minutes SMALLINT UNSIGNED NOT NULL DEFAULT 30, cost DECIMAL(10,2) NOT NULL, active BOOLEAN NOT NULL DEFAULT TRUE);
+CREATE TABLE appointments (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, patient_id BIGINT UNSIGNED NOT NULL, starts_at DATETIME NOT NULL, ends_at DATETIME NOT NULL, status ENUM('booked','confirmed','arrived','cancelled','no_show') NOT NULL DEFAULT 'booked', notes TEXT, created_by BIGINT UNSIGNED, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, CONSTRAINT fk_appointment_patient FOREIGN KEY(patient_id) REFERENCES patients(id), CONSTRAINT fk_appointment_user FOREIGN KEY(created_by) REFERENCES users(id), INDEX idx_appointment_slot(starts_at,ends_at));
+CREATE TABLE appointment_services (appointment_id BIGINT UNSIGNED NOT NULL, service_id BIGINT UNSIGNED NOT NULL, description VARCHAR(190) NOT NULL, cost DECIMAL(10,2) NOT NULL, clinical_notes TEXT, PRIMARY KEY(appointment_id,service_id), FOREIGN KEY(appointment_id) REFERENCES appointments(id) ON DELETE CASCADE, FOREIGN KEY(service_id) REFERENCES services(id));
+CREATE TABLE attachments (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, patient_id BIGINT UNSIGNED NOT NULL, original_name VARCHAR(255) NOT NULL, storage_name VARCHAR(255) NOT NULL UNIQUE, mime_type VARCHAR(100), size_bytes BIGINT UNSIGNED, uploaded_by BIGINT UNSIGNED, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(patient_id) REFERENCES patients(id) ON DELETE CASCADE, FOREIGN KEY(uploaded_by) REFERENCES users(id));
+CREATE TABLE invoices (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, patient_id BIGINT UNSIGNED NOT NULL, number VARCHAR(40) NOT NULL UNIQUE, issued_at DATE NOT NULL, subtotal DECIMAL(10,2) NOT NULL, discount DECIMAL(10,2) NOT NULL DEFAULT 0, total DECIMAL(10,2) NOT NULL, status ENUM('draft','issued','partially_paid','paid','cancelled') NOT NULL DEFAULT 'draft', FOREIGN KEY(patient_id) REFERENCES patients(id));
+CREATE TABLE invoice_items (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, invoice_id BIGINT UNSIGNED NOT NULL, appointment_id BIGINT UNSIGNED, service_id BIGINT UNSIGNED, description VARCHAR(190) NOT NULL, quantity DECIMAL(8,2) NOT NULL DEFAULT 1, unit_price DECIMAL(10,2) NOT NULL, FOREIGN KEY(invoice_id) REFERENCES invoices(id) ON DELETE CASCADE, FOREIGN KEY(appointment_id) REFERENCES appointments(id), FOREIGN KEY(service_id) REFERENCES services(id));
+CREATE TABLE balance_accounts (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, description VARCHAR(120) NOT NULL UNIQUE, active BOOLEAN NOT NULL DEFAULT TRUE);
+CREATE TABLE payments (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, invoice_id BIGINT UNSIGNED NOT NULL, paid_at DATE NOT NULL, amount DECIMAL(10,2) NOT NULL, kind ENUM('deposit','settlement') NOT NULL, notes TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(invoice_id) REFERENCES invoices(id));
+CREATE TABLE payment_splits (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, payment_id BIGINT UNSIGNED NOT NULL, balance_account_id BIGINT UNSIGNED NOT NULL, amount DECIMAL(10,2) NOT NULL, FOREIGN KEY(payment_id) REFERENCES payments(id) ON DELETE CASCADE, FOREIGN KEY(balance_account_id) REFERENCES balance_accounts(id));
+CREATE TABLE ledger_entries (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, payment_split_id BIGINT UNSIGNED UNIQUE, balance_account_id BIGINT UNSIGNED NOT NULL, description VARCHAR(255) NOT NULL, amount DECIMAL(10,2) NOT NULL COMMENT 'Positive for income, negative for expense', paid_at DATE NOT NULL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, FOREIGN KEY(payment_split_id) REFERENCES payment_splits(id), FOREIGN KEY(balance_account_id) REFERENCES balance_accounts(id), INDEX idx_ledger_filters(paid_at,balance_account_id,description));
+CREATE TABLE opening_hours (weekday TINYINT UNSIGNED PRIMARY KEY COMMENT '1 Monday through 7 Sunday', is_closed BOOLEAN NOT NULL DEFAULT FALSE, opens_at TIME, closes_at TIME);
+CREATE TABLE closure_periods (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, starts_on DATE NOT NULL, ends_on DATE NOT NULL, description VARCHAR(190));
+CREATE TABLE settings (`key` VARCHAR(80) PRIMARY KEY, `value` VARCHAR(255) NOT NULL);
+INSERT INTO settings (`key`,`value`) VALUES ('appointment_slot_minutes','30'),('agenda_days','7');
+INSERT INTO balance_accounts(description) VALUES ('POS'),('Bonifico'),('Contanti');
+INSERT INTO opening_hours VALUES (1,0,'08:00','19:00'),(2,0,'08:00','19:00'),(3,0,'08:00','19:00'),(4,0,'08:00','19:00'),(5,0,'08:00','19:00'),(6,0,'08:00','13:00'),(7,1,NULL,NULL);
+
+DELIMITER //
+CREATE TRIGGER payment_split_to_ledger AFTER INSERT ON payment_splits FOR EACH ROW
+BEGIN
+  INSERT INTO ledger_entries(payment_split_id,balance_account_id,description,amount,paid_at)
+  SELECT NEW.id,NEW.balance_account_id,CONCAT('Pagamento fattura ',i.number),NEW.amount,p.paid_at FROM payments p JOIN invoices i ON i.id=p.invoice_id WHERE p.id=NEW.payment_id;
+END//
+DELIMITER ;
