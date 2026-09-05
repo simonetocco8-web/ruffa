@@ -109,5 +109,21 @@ function status(string $value): string { return '<span class="status '.strtolowe
   </div>
 </main>
 <div class="modal-wrap" id="appointment"><div class="modal"><button class="close">×</button><span class="eyebrow">AGENDA</span><h2>Nuovo appuntamento</h2><p>Inserisci i dettagli della prenotazione.</p><form><label>Paziente<select><option>Seleziona un paziente</option><option>Elena Bianchi</option><option>Luca Romano</option></select></label><div class="form-row"><label>Data<input type="date" value="2026-09-05"></label><label>Orario<select><option>14:00</option><option>14:30</option><option>15:00</option></select></label></div><label>Prestazione<select><option>Fisioterapia manuale · € 55</option><option>Tecarterapia · € 65</option></select></label><div class="modal-actions"><button type="button" class="secondary close-action">Annulla</button><button type="submit" class="primary">Salva appuntamento</button></div></form></div></div>
+<?php if ($page === 'users'): ?>
+<div class="modal-wrap" id="user" role="dialog" aria-modal="true" aria-labelledby="new-user-title">
+  <div class="modal">
+    <button class="close" type="button" aria-label="Chiudi">×</button>
+    <span class="eyebrow">UTENTI</span><h2 id="new-user-title">Nuovo utente</h2><p>Crea un accesso e assegna i permessi corretti.</p>
+    <form id="newUserForm">
+      <div class="form-row"><label>Nome<input name="first_name" required autocomplete="given-name" placeholder="es. Laura"></label><label>Cognome<input name="last_name" required autocomplete="family-name" placeholder="es. Bianchi"></label></div>
+      <label>Indirizzo email<input name="email" type="email" required autocomplete="email" placeholder="nome@studio.it"></label>
+      <label>Numero di telefono<input name="phone" type="tel" required autocomplete="tel" placeholder="es. 333 123 4567"></label>
+      <label>Ruolo<select name="role" required><option value="">Seleziona un ruolo</option><option>Amministratore</option><option>Segreteria</option><option>Fisioterapista</option></select><small class="field-hint">I permessi saranno applicati automaticamente in base al ruolo.</small></label>
+      <div class="modal-actions"><button type="button" class="secondary close-action">Annulla</button><button type="submit" class="primary">Crea utente</button></div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
+<div class="toast" id="toast" role="status" aria-live="polite">Utente creato correttamente</div>
 <script src="assets/app.js"></script>
 </body></html>
